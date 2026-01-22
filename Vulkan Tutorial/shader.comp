@@ -1,5 +1,7 @@
 #version 450
 
+#extension GL_KHR_shader_subgroup_arithmatic: enable
+
 struct Particle
 {
 	vec2 position;

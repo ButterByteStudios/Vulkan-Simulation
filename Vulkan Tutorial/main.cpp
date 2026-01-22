@@ -19,7 +19,7 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 const int MAX_FRAMES_IN_FLIGHT = 3;
-const int PARTICLE_COUNT = 1 << 16;
+const int PARTICLE_COUNT = 1 << 23;
 const int KERNEL_SIZE = 256;
 
 const std::vector<const char*> validationLayers =
@@ -257,7 +257,7 @@ private:
 			appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
 			appInfo.pEngineName = "No Engine";
 			appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-			appInfo.apiVersion = VK_API_VERSION_1_0;
+			appInfo.apiVersion = VK_API_VERSION_1_1;
 
 			VkInstanceCreateInfo createInfo{};
 			createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -533,13 +533,16 @@ private:
 		bool extensionsSupported = checkDeviceExtensionSupport(device);
 
 		bool swapChainAdequate = false;
+		bool subgroupsSupported = false;
 		if (extensionsSupported)
 		{
 			SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
 			swapChainAdequate = swapChainSupport.isComplete();
+
+			subgroupsSupported = checkDeviceSubgroupSupport(device);
 		}
 
-		return indices.isComplete() && extensionsSupported && swapChainAdequate;
+		return indices.isComplete() && extensionsSupported && swapChainAdequate && subgroupsSupported;
 	}
 
 	bool checkDeviceExtensionSupport(VkPhysicalDevice device)
@@ -558,6 +561,29 @@ private:
 		}
 
 		return requiredExtensions.empty();
+	}
+
+	bool checkDeviceSubgroupSupport(VkPhysicalDevice device)
+	{
+		VkPhysicalDeviceSubgroupProperties subgroupProperties{};
+		subgroupProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
+		subgroupProperties.pNext = nullptr;
+
+		VkPhysicalDeviceProperties2 physicalDeviceProperties{};
+		physicalDeviceProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		physicalDeviceProperties.pNext = &subgroupProperties;
+
+		// Check for subgroup support. Update support check per feature used (none yet)
+		vkGetPhysicalDeviceProperties2(device, &physicalDeviceProperties);
+
+		VkSubgroupFeatureFlags requiredOperationFlags{};
+		requiredOperationFlags |= VK_SUBGROUP_FEATURE_BASIC_BIT | VK_SUBGROUP_FEATURE_ARITHMETIC_BIT;
+
+		VkShaderStageFlags requiredStageFlags{};
+		requiredStageFlags |= VK_SHADER_STAGE_COMPUTE_BIT;
+
+		return ((subgroupProperties.supportedOperations & requiredOperationFlags) == requiredOperationFlags) && 
+			((subgroupProperties.supportedStages & requiredStageFlags) == requiredStageFlags);
 	}
 
 	void createLogicalDevice()
