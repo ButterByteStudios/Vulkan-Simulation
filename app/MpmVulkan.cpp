@@ -1,7 +1,10 @@
-#define GLFW_INCLUDE_VULKAN
+﻿#define GLFW_INCLUDE_VULKAN
+
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <vulkan/vulkan.h>
 
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <algorithm>
@@ -19,7 +22,7 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 const int MAX_FRAMES_IN_FLIGHT = 3;
-const int PARTICLE_COUNT = 1 << 23;
+const int PARTICLE_COUNT = 1 << 12;
 const int KERNEL_SIZE = 256;
 
 const std::vector<const char*> validationLayers =
@@ -124,7 +127,7 @@ struct SwapChainSupportDetails
 	}
 };
 
-class HelloTriangleApplication 
+class HelloTriangleApplication
 {
 public:
 	void run()
@@ -245,76 +248,76 @@ private:
 	}
 
 	void createInstance()
+	{
+		if (enableValidationLayers && !checkValidationLayerSupport())
 		{
-			if (enableValidationLayers && !checkValidationLayerSupport())
-			{
-				throw std::runtime_error("Validation layers requested, but not available.");
-			}
-
-			VkApplicationInfo appInfo{};
-			appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-			appInfo.pApplicationName = "Hello Triangle";
-			appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-			appInfo.pEngineName = "No Engine";
-			appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-			appInfo.apiVersion = VK_API_VERSION_1_1;
-
-			VkInstanceCreateInfo createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-			createInfo.pApplicationInfo = &appInfo;
-
-			auto glfwExtensions = getRequiredExtensions();
-			uint32_t glfwExtensionCount = static_cast<uint32_t>(glfwExtensions.size());
-			createInfo.enabledExtensionCount = glfwExtensionCount;
-			createInfo.ppEnabledExtensionNames = glfwExtensions.data();
-
-			VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
-			if (enableValidationLayers)
-			{
-				createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-				createInfo.ppEnabledLayerNames = validationLayers.data();
-
-				populateDebugMessengerCreateInfo(debugCreateInfo);
-				createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
-			}
-			else
-			{
-				createInfo.enabledLayerCount = 0;
-
-				createInfo.pNext = nullptr;
-			}
-
-			if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS)
-			{
-				throw std::runtime_error("failed to create instance.");
-			}
-
-			uint32_t extensionCount = 0;
-			vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-
-			std::vector<VkExtensionProperties> extensions(extensionCount);
-
-			vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
-
-			std::cout << "Required extensions:\n";
-
-			for (uint32_t i = 0; i < glfwExtensionCount; i++)
-			{
-				const char* requiredExtension = glfwExtensions[i];
-
-				bool containsExtension = false;
-				for (const auto& extension : extensions)
-				{
-					if (strcmp(extension.extensionName, requiredExtension) == 0)
-					{
-						containsExtension = true;
-						break;
-					}
-				}
-
-				std::cout << (containsExtension ? "Available:" : "Unavailable:") << ' ' << requiredExtension << '\n';
-			}
+			throw std::runtime_error("Validation layers requested, but not available.");
 		}
+
+		VkApplicationInfo appInfo{};
+		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+		appInfo.pApplicationName = "Hello Triangle";
+		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+		appInfo.pEngineName = "No Engine";
+		appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+		appInfo.apiVersion = VK_API_VERSION_1_1;
+
+		VkInstanceCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+		createInfo.pApplicationInfo = &appInfo;
+
+		auto glfwExtensions = getRequiredExtensions();
+		uint32_t glfwExtensionCount = static_cast<uint32_t>(glfwExtensions.size());
+		createInfo.enabledExtensionCount = glfwExtensionCount;
+		createInfo.ppEnabledExtensionNames = glfwExtensions.data();
+
+		VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+		if (enableValidationLayers)
+		{
+			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+			createInfo.ppEnabledLayerNames = validationLayers.data();
+
+			populateDebugMessengerCreateInfo(debugCreateInfo);
+			createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
+		}
+		else
+		{
+			createInfo.enabledLayerCount = 0;
+
+			createInfo.pNext = nullptr;
+		}
+
+		if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS)
+		{
+			throw std::runtime_error("failed to create instance.");
+		}
+
+		uint32_t extensionCount = 0;
+		vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+
+		std::vector<VkExtensionProperties> extensions(extensionCount);
+
+		vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
+
+		std::cout << "Required extensions:\n";
+
+		for (uint32_t i = 0; i < glfwExtensionCount; i++)
+		{
+			const char* requiredExtension = glfwExtensions[i];
+
+			bool containsExtension = false;
+			for (const auto& extension : extensions)
+			{
+				if (strcmp(extension.extensionName, requiredExtension) == 0)
+				{
+					containsExtension = true;
+					break;
+				}
+			}
+
+			std::cout << (containsExtension ? "Available:" : "Unavailable:") << ' ' << requiredExtension << '\n';
+		}
+	}
 
 	void drawFrame()
 	{
@@ -360,7 +363,7 @@ private:
 		vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 		recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
-		VkSemaphore waitSemaphores[] = { computeFinishedSemaphores[currentFrame], imageAvailableSemaphores[currentFrame]};
+		VkSemaphore waitSemaphores[] = { computeFinishedSemaphores[currentFrame], imageAvailableSemaphores[currentFrame] };
 		VkPipelineStageFlags waitStages[]{ VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
 		submitInfo = {};
@@ -502,7 +505,7 @@ private:
 	{
 		uint32_t deviceCount = 0;
 		vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-		
+
 		if (deviceCount == 0)
 		{
 			throw std::runtime_error("Failed to find GPU's with Vulkan support.");
@@ -582,7 +585,7 @@ private:
 		VkShaderStageFlags requiredStageFlags{};
 		requiredStageFlags |= VK_SHADER_STAGE_COMPUTE_BIT;
 
-		return ((subgroupProperties.supportedOperations & requiredOperationFlags) == requiredOperationFlags) && 
+		return ((subgroupProperties.supportedOperations & requiredOperationFlags) == requiredOperationFlags) &&
 			((subgroupProperties.supportedStages & requiredStageFlags) == requiredStageFlags);
 	}
 
@@ -797,13 +800,13 @@ private:
 		return VK_PRESENT_MODE_FIFO_KHR;
 	}
 
-	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) 
+	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities)
 	{
-		if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) 
+		if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
 		{
 			return capabilities.currentExtent;
 		}
-		else 
+		else
 		{
 			int width, height;
 			glfwGetFramebufferSize(window, &width, &height);
@@ -963,8 +966,17 @@ private:
 
 	void createGraphicsPipeline()
 	{
-		auto vertShaderCode = readFile("shaders/vert.spv");
-		auto fragShaderCode = readFile("shaders/frag.spv");
+		try
+		{
+			auto vertShaderCode = readFile("../shaders/shader.vert.spv");
+		}
+		catch (std::runtime_error e)
+		{
+			std::cout << std::filesystem::current_path() << std::endl;
+			throw std::runtime_error(e);
+		}
+		auto vertShaderCode = readFile("../shaders/shader.vert.spv");
+		auto fragShaderCode = readFile("../shaders/shader.frag.spv");
 
 		VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
 		VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -1095,7 +1107,7 @@ private:
 		pipelineInfo.pColorBlendState = &colorBlending;
 		pipelineInfo.pDepthStencilState = nullptr;
 		pipelineInfo.pDynamicState = &dynamicState;
-		
+
 		pipelineInfo.layout = pipelineLayout;
 		pipelineInfo.renderPass = renderPass;
 		pipelineInfo.subpass = 0;
@@ -1114,7 +1126,7 @@ private:
 
 	void createComputePipeline()
 	{
-		auto computeShaderCode = readFile("shaders/comp.spv");
+		auto computeShaderCode = readFile("../shaders/shader.comp.spv");
 
 		VkShaderModule computeShaderModule = createShaderModule(computeShaderCode);
 
@@ -1214,7 +1226,7 @@ private:
 		createCommandPool(queueFamilyIndices.graphicsAndComputeFamily.value(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &transientCommandPool);
 	}
 
-	void createCommandPool(uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags, VkCommandPool *commandPool)
+	void createCommandPool(uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags, VkCommandPool* commandPool)
 	{
 		VkCommandPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -1284,28 +1296,28 @@ private:
 
 		vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-			VkViewport viewPort{};
-			viewPort.x = 0.0f;
-			viewPort.y = 0.0f;
-			viewPort.width = static_cast<float>(swapChainExtent.width);
-			viewPort.height = static_cast<float>(swapChainExtent.height);
-			viewPort.minDepth = 0.0f;
-			viewPort.maxDepth = 1.0f;
-			vkCmdSetViewport(commandBuffer, 0, 1, &viewPort);
+		VkViewport viewPort{};
+		viewPort.x = 0.0f;
+		viewPort.y = 0.0f;
+		viewPort.width = static_cast<float>(swapChainExtent.width);
+		viewPort.height = static_cast<float>(swapChainExtent.height);
+		viewPort.minDepth = 0.0f;
+		viewPort.maxDepth = 1.0f;
+		vkCmdSetViewport(commandBuffer, 0, 1, &viewPort);
 
-			VkRect2D scissor{};
-			scissor.offset = { 0, 0 };
-			scissor.extent = swapChainExtent;
-			vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+		VkRect2D scissor{};
+		scissor.offset = { 0, 0 };
+		scissor.extent = swapChainExtent;
+		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-			VkDeviceSize offsets[] = { 0 };
-			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &shaderStorageBuffers[currentFrame], offsets);
+		VkDeviceSize offsets[] = { 0 };
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &shaderStorageBuffers[currentFrame], offsets);
 
-			vkCmdDraw(commandBuffer, PARTICLE_COUNT, 1, 0, 0);
+		vkCmdDraw(commandBuffer, PARTICLE_COUNT, 1, 0, 0);
 
 		vkCmdEndRenderPass(commandBuffer);
 
@@ -1350,7 +1362,7 @@ private:
 
 		VkSemaphoreCreateInfo semaphoreInfo{};
 		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		
+
 		VkFenceCreateInfo fenceInfo{};
 		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -1585,7 +1597,7 @@ private:
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandPool = transientCommandPool;
 		allocInfo.commandBufferCount = 1;
-		
+
 		VkCommandBuffer commandBuffer;
 		vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
 
@@ -1674,7 +1686,7 @@ private:
 	}
 };
 
-int main() 
+int main()
 {
 	HelloTriangleApplication app;
 
