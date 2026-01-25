@@ -21,7 +21,7 @@
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
-const int MAX_FRAMES_IN_FLIGHT = 3;
+const int MAX_FRAMES_IN_FLIGHT = 2;
 const int PARTICLE_COUNT = 1 << 12;
 const int KERNEL_SIZE = 256;
 
@@ -44,6 +44,12 @@ const bool enableValidationLayers = true;
 struct UniformBufferObject
 {
 	float deltaTime = 1.0f;
+};
+
+struct ComputePushConstants
+{
+	float cellSize;
+	int dimensions;
 };
 
 struct Particle
@@ -127,7 +133,7 @@ struct SwapChainSupportDetails
 	}
 };
 
-class HelloTriangleApplication
+class MpmVulkan
 {
 public:
 	void run()
@@ -225,7 +231,7 @@ private:
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-		window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+		window = glfwCreateWindow(WIDTH, HEIGHT, "MpmVulkan", nullptr, nullptr);
 		glfwSetWindowUserPointer(window, this);
 		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
@@ -1133,10 +1139,17 @@ private:
 		computeShaderStageInfo.module = computeShaderModule;
 		computeShaderStageInfo.pName = "main";
 
+		VkPushConstantRange range{};
+		range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+		range.offset = 0;
+		range.size = sizeof(ComputePushConstants);
+
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipelineLayoutInfo.setLayoutCount = 1;
 		pipelineLayoutInfo.pSetLayouts = &computeDescriptorSetLayout;
+		pipelineLayoutInfo.pushConstantRangeCount = 1;
+		pipelineLayoutInfo.pPushConstantRanges = &range;
 
 		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &computePipelineLayout) != VK_SUCCESS)
 		{
@@ -1351,6 +1364,12 @@ private:
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
 
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[currentFrame], 0, nullptr);
+
+		ComputePushConstants constants{};
+		constants.cellSize = 1;
+		constants.dimensions = dimensions;
+
+		vkCmdPushConstants(commandBuffer, computePipelineLayout, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, sizeof(ComputePushConstants), &constants);
 
 		vkCmdDispatch(commandBuffer, PARTICLE_COUNT / KERNEL_SIZE, 1, 1);
 
@@ -1670,6 +1689,9 @@ private:
 
 		VkClearColorValue clear{};
 		clear.float32[0] = 0.0f;
+		clear.float32[1] = 0.0f;
+		clear.float32[2] = 0.0f;
+		clear.float32[3] = 0.0f;
 
 		VkImageSubresourceRange range{};
 		range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1940,14 +1962,14 @@ private:
 
 	static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 	{
-		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+		auto app = reinterpret_cast<MpmVulkan*>(glfwGetWindowUserPointer(window));
 		app->framebufferResized = true;
 	}
 };
 
 int main()
 {
-	HelloTriangleApplication app;
+	MpmVulkan app;
 
 	try
 	{
