@@ -182,8 +182,8 @@ private:
 	std::vector<VkCommandBuffer> commandBuffers;
 	std::vector<VkCommandBuffer> computeCommandBuffers;
 
-	std::vector<VkSemaphore> imageAvailableSemaphores;
-	std::vector<VkSemaphore> renderFinishedSemaphores;
+	std::vector<VkSemaphore> imageAquireSemaphores;
+	std::vector<VkSemaphore> imageSubmitSemaphores;
 	std::vector<VkFence> inFlightFences;
 
 	std::vector<VkFence> computeInFlightFences;
@@ -360,7 +360,7 @@ private:
 		vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
 		uint32_t imageIndex;
-		VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+		VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAquireSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
 		if (result == VK_ERROR_OUT_OF_DATE_KHR)
 		{
@@ -377,7 +377,7 @@ private:
 		vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 		recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
-		VkSemaphore waitSemaphores[] = { computeFinishedSemaphores[currentFrame], imageAvailableSemaphores[currentFrame] };
+		VkSemaphore waitSemaphores[] = { computeFinishedSemaphores[currentFrame], imageAquireSemaphores[currentFrame] };
 		VkPipelineStageFlags waitStages[]{ VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
 		submitInfo = {};
@@ -389,7 +389,7 @@ private:
 		submitInfo.pWaitSemaphores = waitSemaphores;
 		submitInfo.pWaitDstStageMask = waitStages;
 
-		VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
+		VkSemaphore signalSemaphores[] = { imageSubmitSemaphores[imageIndex] };
 		submitInfo.signalSemaphoreCount = 1;
 		submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -692,8 +692,7 @@ private:
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
-			vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
-			vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
+			vkDestroySemaphore(device, imageAquireSemaphores[i], nullptr);
 			vkDestroyFence(device, inFlightFences[i], nullptr);
 
 			vkDestroySemaphore(device, computeFinishedSemaphores[i], nullptr);
@@ -1335,8 +1334,7 @@ private:
 
 	void createSyncObjects()
 	{
-		imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-		renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+		imageAquireSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 		inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
 		computeInFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1351,8 +1349,7 @@ private:
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
-			if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
-				vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
+			if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAquireSemaphores[i]) != VK_SUCCESS ||
 				vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS)
 			{
 				throw std::runtime_error("Failed to create sync objects for a frame.");
@@ -1362,6 +1359,23 @@ private:
 				vkCreateFence(device, &fenceInfo, nullptr, &computeInFlightFences[i]) != VK_SUCCESS)
 			{
 				throw std::runtime_error("Failed to create compute sync objects for a frame.");
+			}
+		}
+
+		createSwapchainSyncObjects();
+	}
+
+	void createSwapchainSyncObjects()
+	{
+		VkSemaphoreCreateInfo semaphoreInfo{};
+		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+		imageSubmitSemaphores.resize(swapChainImages.size());
+		for (size_t i = 0; i < swapChainImages.size(); i++)
+		{
+			if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageSubmitSemaphores[i]) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed to create swapchain semaphores.");
 			}
 		}
 	}
@@ -1384,10 +1398,16 @@ private:
 		createSwapChain();
 		createSwapchainImageViews();
 		createFrameBuffers();
+		createSwapchainSyncObjects();
 	}
 
 	void cleanupSwapchain()
 	{
+		for (auto submitSemaphore : imageSubmitSemaphores)
+		{
+			vkDestroySemaphore(device, submitSemaphore, nullptr);
+		}
+
 		for (auto framebuffer : swapChainFramebuffers)
 		{
 			vkDestroyFramebuffer(device, framebuffer, nullptr);
