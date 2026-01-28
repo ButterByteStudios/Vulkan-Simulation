@@ -163,8 +163,11 @@ private:
 	std::vector<VkImageView> swapChainImageViews;
 	std::vector<VkFramebuffer> swapChainFramebuffers;
 
-	VkCommandPool commandPool;
-	VkCommandPool transientCommandPool;;
+	VkCommandPool graphicsCommandPool;
+	VkCommandPool transientGraphicsCommandPool;
+
+	VkCommandPool computeCommandPool;
+	VkCommandPool transientComputeCommandPool;
 
 	std::vector<VkCommandBuffer> commandBuffers;
 	std::vector<VkCommandBuffer> computeCommandBuffers;
@@ -513,19 +516,19 @@ private:
 		deviceBuilder.deviceExtensions = deviceExtensions;
 		deviceBuilder.validationLayers = validationLayers;
 
-		deviceBuilder.addQueue(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, 0, 1.0f, false);
-		deviceBuilder.addQueue(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, 0, 1.0f, false);
+		deviceBuilder.addQueue(VK_QUEUE_GRAPHICS_BIT, 0, 1.0f, false);
+		deviceBuilder.addQueue(VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT, 1.0f, false);
 		deviceBuilder.addQueue(0, 0, 1.0f, true);
 
 		deviceBuilder.pickPhysicalDevice(physicalDevice);
 
 		deviceBuilder.build(device, enableValidationLayers);
 
-		deviceBuilder.getQueue(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, 0, false, graphicsQueue);
-		graphicsFamilyIndex = deviceBuilder.getQueueFamily(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, 0, false);
+		deviceBuilder.getQueue(VK_QUEUE_GRAPHICS_BIT, 0, false, graphicsQueue);
+		graphicsFamilyIndex = deviceBuilder.getQueueFamily(VK_QUEUE_GRAPHICS_BIT, 0, false);
 
-		deviceBuilder.getQueue(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, 0, false, computeQueue);
-		computeFamilyIndex = deviceBuilder.getQueueFamily(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT, 0, false);
+		deviceBuilder.getQueue(VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT, false, computeQueue);
+		computeFamilyIndex = deviceBuilder.getQueueFamily(VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT, false);
 
 		deviceBuilder.getQueue(0, 0, true, presentQueue);
 		presentFamilyIndex = deviceBuilder.getQueueFamily(0, 0, false);
@@ -942,8 +945,11 @@ private:
 
 	void createCommandPools()
 	{
-		createCommandPool(graphicsFamilyIndex, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, &commandPool);
-		createCommandPool(graphicsFamilyIndex, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &transientCommandPool);
+		createCommandPool(graphicsFamilyIndex, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, &graphicsCommandPool);
+		createCommandPool(graphicsFamilyIndex, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &transientGraphicsCommandPool);
+
+		createCommandPool(computeFamilyIndex, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, &computeCommandPool);
+		createCommandPool(computeFamilyIndex, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &transientComputeCommandPool);
 	}
 
 	void createCommandPool(uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags, VkCommandPool* commandPool)
@@ -965,7 +971,7 @@ private:
 
 		VkCommandBufferAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = commandPool;
+		allocInfo.commandPool = graphicsCommandPool;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
 
@@ -981,7 +987,7 @@ private:
 
 		VkCommandBufferAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = commandPool; // Probably change this for future async compute
+		allocInfo.commandPool = computeCommandPool; // Probably change this for future async compute
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
 
@@ -1610,7 +1616,7 @@ private:
 		VkCommandBufferAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandPool = transientCommandPool;
+		allocInfo.commandPool = transientGraphicsCommandPool;
 		allocInfo.commandBufferCount = 1;
 
 		VkCommandBuffer commandBuffer;
@@ -1637,7 +1643,42 @@ private:
 		vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
 		vkQueueWaitIdle(graphicsQueue);
 
-		vkFreeCommandBuffers(device, transientCommandPool, 1, &commandBuffer);
+		vkFreeCommandBuffers(device, transientGraphicsCommandPool, 1, &commandBuffer);
+	}
+
+	VkCommandBuffer beginSingleTimeComputeCommands()
+	{
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandPool = transientComputeCommandPool;
+		allocInfo.commandBufferCount = 1;
+
+		VkCommandBuffer commandBuffer;
+		vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+
+		VkCommandBufferBeginInfo beginInfo{};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+		vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+		return commandBuffer;
+	}
+
+	void endSingleTimeComputeCommands(VkCommandBuffer commandBuffer)
+	{
+		vkEndCommandBuffer(commandBuffer);
+
+		VkSubmitInfo submitInfo{};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffer;
+
+		vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+		vkQueueWaitIdle(graphicsQueue);
+
+		vkFreeCommandBuffers(device, transientComputeCommandPool, 1, &commandBuffer);
 	}
 
 	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
@@ -1721,8 +1762,11 @@ private:
 			vkDestroyFence(device, computeInFlightFences[i], nullptr);
 		}
 
-		vkDestroyCommandPool(device, commandPool, nullptr);
-		vkDestroyCommandPool(device, transientCommandPool, nullptr);
+		vkDestroyCommandPool(device, graphicsCommandPool, nullptr);
+		vkDestroyCommandPool(device, transientGraphicsCommandPool, nullptr);
+
+		vkDestroyCommandPool(device, computeCommandPool, nullptr);
+		vkDestroyCommandPool(device, transientComputeCommandPool, nullptr);
 
 		vkDestroyDevice(device, nullptr);
 

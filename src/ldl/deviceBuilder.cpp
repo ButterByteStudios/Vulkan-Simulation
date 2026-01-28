@@ -35,6 +35,12 @@ namespace ldl
 		for (QueueRequest queueRequest : queueRequests)
 		{
 			std::optional<int> queueFamily = findQueueFamily(physicalDevice, queueRequest.flags, queueRequest.excludedFlags, queueRequest.supportsPresent);
+
+			if (!queueFamily.has_value())
+			{
+				hasIndices = false;
+				break;
+			}
 		}
 
 		return hasIndices && extensionsSupported && swapChainAdequate && subgroupsSupported;
@@ -230,7 +236,7 @@ namespace ldl
 				vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
 			}
 
-			if ((queueFamily.queueFlags | flags) == queueFamily.queueFlags && (queueFamily.queueFlags & excludedFlags) == 0 && presentSupport)
+			if ((queueFamily.queueFlags & flags) == flags && (queueFamily.queueFlags & excludedFlags) == 0 && presentSupport)
 			{
 				queueFamilyIndex = i;
 				return queueFamilyIndex;
