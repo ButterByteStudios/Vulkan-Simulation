@@ -23,12 +23,14 @@ namespace ldl
 
 		bool swapChainAdequate = false;
 		bool subgroupsSupported = false;
+		bool atomicsSupported = false;
 		if (extensionsSupported)
 		{
 			SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
 			swapChainAdequate = swapChainSupport.isComplete();
 
 			subgroupsSupported = checkDeviceSubgroupSupport(physicalDevice);
+			atomicsSupported = checkDeviceAtomicsSupport(physicalDevice);
 		}
 
 		bool hasIndices = true;
@@ -43,7 +45,7 @@ namespace ldl
 			}
 		}
 
-		return hasIndices && extensionsSupported && swapChainAdequate && subgroupsSupported;
+		return hasIndices && extensionsSupported && swapChainAdequate && subgroupsSupported && atomicsSupported;
 	}
 
 	bool DeviceBuilder::checkDeviceExtensionSupport(VkPhysicalDevice device)
@@ -68,13 +70,11 @@ namespace ldl
 	{
 		VkPhysicalDeviceSubgroupProperties subgroupProperties{};
 		subgroupProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
-		subgroupProperties.pNext = nullptr;
 
 		VkPhysicalDeviceProperties2 physicalDeviceProperties{};
 		physicalDeviceProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
 		physicalDeviceProperties.pNext = &subgroupProperties;
 
-		// Check for subgroup support. Update support check per feature used (none yet)
 		vkGetPhysicalDeviceProperties2(device, &physicalDeviceProperties);
 
 		VkSubgroupFeatureFlags requiredOperationFlags{};
@@ -86,6 +86,20 @@ namespace ldl
 		// subgroupProperties.subgroupSize can be used for particle aosoa struct array size and can be passed to gpu for proper indexing
 		return ((subgroupProperties.supportedOperations & requiredOperationFlags) == requiredOperationFlags) &&
 			((subgroupProperties.supportedStages & requiredStageFlags) == requiredStageFlags);
+	}
+
+	bool DeviceBuilder::checkDeviceAtomicsSupport(VkPhysicalDevice device)
+	{
+		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT floatFeatures{};
+		floatFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
+
+		VkPhysicalDeviceFeatures2 physicalDeviceFeatures{};
+		physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+		physicalDeviceFeatures.pNext = &floatFeatures;
+
+		vkGetPhysicalDeviceFeatures2(device, &physicalDeviceFeatures);
+
+		return floatFeatures.shaderBufferFloat32AtomicAdd == VK_TRUE;
 	}
 
 	DeviceBuilder::SwapChainSupportDetails DeviceBuilder::querySwapChainSupport(VkPhysicalDevice device)
@@ -188,6 +202,10 @@ namespace ldl
 
 		VkPhysicalDeviceFeatures deviceFeatures{};
 
+		VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicFloatFeatures{};
+		atomicFloatFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
+		atomicFloatFeatures.shaderBufferFloat32AtomicAdd = VK_TRUE;
+
 		VkDeviceCreateInfo deviceInfo{};
 		deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
@@ -196,6 +214,7 @@ namespace ldl
 		deviceInfo.pEnabledFeatures = &deviceFeatures;
 		deviceInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 		deviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
+		deviceInfo.pNext = &atomicFloatFeatures;
 
 		if (enableValidationLayers) {
 			deviceInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());

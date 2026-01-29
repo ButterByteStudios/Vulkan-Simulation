@@ -1,0 +1,66 @@
+#version 450
+
+layout(binding = 0) uniform ParameterUBO
+{
+    int dimensions;
+	float k;
+	float mu;
+	float rho;
+	float dx;
+	float invDx;
+} ubo;
+
+layout(std140, binding = 1) readonly buffer GridVelocitySSBOIn
+{
+	vec2 vRGrid[];
+};
+
+layout(std140, binding = 2) writeonly buffer GridVelocitySSBOOut
+{
+	vec2 vWGrid[];
+};
+
+layout(std140, binding = 3) buffer GridMassSSBO
+{
+	float mGrid[];
+};
+
+layout(push_constant) uniform PushConstants {
+	float dt;
+} pc;
+
+uint index(uint x, uint y)
+{
+	return x + y * ubo.dimensions;
+}
+
+layout(local_size_x = 256, local_size_y = 256, local_size_z = 1) in;
+
+void main()
+{
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+    
+    uint i = index(x, y);
+
+	vec2 v = vRGrid[i];
+	float m = mGrid[i];
+
+	// Reset mass for next steps scatter
+	mGrid[i] = 0;
+
+	bool left = x <= 1;
+	bool right = x >= ubo.dimensions - 2;
+	bool down = y <= 1;
+	bool up = y >= ubo.dimensions - 2;
+
+	if (m == 0 || left || right || down || up)
+	{
+		// Simple no slip boundary
+		vWGrid[i] = vec2(0);
+		return;
+	}
+
+	// Convert momentum to velocity
+	vWGrid[i] = v / m + vec2(0, 9.81 * pc.dt);
+}
